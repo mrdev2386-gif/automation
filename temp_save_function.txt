@@ -1,0 +1,71 @@
+﻿exports.saveLeadFinderAPIKey = functions.https.onCall(async (data, context) => {
+    // Check authentication
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            'unauthenticated',
+            'Authentication required'
+        );
+    }
+
+    try {
+        if (!data.apiKey || typeof data.apiKey !== 'string' || data.apiKey.trim() === '') {
+            throw new functions.https.HttpsError(
+                'invalid-argument',
+                'Valid API key is required'
+            );
+        }
+
+        const userId = context.auth.uid;
+        const apiKey = data.apiKey.trim();
+
+        // Get or create lead_finder_config
+        const configRef = db.collection('lead_finder_config').doc(userId);
+        const configDoc = await configRef.get();
+
+        if (!configDoc.exists) {
+            // Create if doesn't exist
+            await configRef.set({
+                user_id: userId,
+                api_key: apiKey,
+                daily_limit: 500,
+                max_concurrent_jobs: 1,
+                status: 'active',
+                created_at: admin.firestore.FieldValue.serverTimestamp(),
+                updated_at: admin.firestore.FieldValue.serverTimestamp()
+            });
+        } else {
+            // Update if exists
+            await configRef.update({
+                api_key: apiKey,
+                updated_at: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        // Log activity
+        await logActivity(userId, 'LEAD_FINDER_API_KEY_SAVED', {
+            apiKeyLength: apiKey.length,
+            masked: apiKey.slice(-8).padStart(apiKey.length, '*')
+        });
+
+        console.log(`âœ… API key saved for user ${userId}`);
+
+        return {
+            success: true,
+            message: 'API key saved successfully'
+        };
+
+    } catch (error) {
+        console.error('Error saving API key:', error);
+        throw new functions.https.HttpsError(
+            'internal',
+            error.message || 'Failed to save API key'
+        );
+    }
+});
+
+/**
+ * getLeadFinderConfig - Get user's Lead Finder configuration (callable function)
+ * Called from LeadFinderSettings page to load current config
+ * Works with both emulator and production as a proper callable function
+ */
+

@@ -1,0 +1,91 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Fault Condition** - Single Firebase Initialization with Valid Config
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Scope the property to concrete failing cases: duplicate initialization, placeholder config values, scattered imports
+  - Test that Firebase initializes exactly once (not twice in App.jsx and services/firebase.js)
+  - Test that firebaseConfig uses production values (not placeholders like "your-api-key")
+  - Test that App.jsx imports from services/firebase.js (not directly from 'firebase/auth')
+  - Test that Analytics is initialized when measurementId exists
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found to understand root cause
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Existing Auth Flow and Functionality
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs (route protection, validation, Firestore operations)
+  - Write property-based tests capturing observed behavior patterns from Preservation Requirements
+  - Test that route protection redirects unauthenticated users to /login
+  - Test that email format and password validation (min 6 chars) work correctly
+  - Test that Firestore operations (getRestaurants, getBookings, etc.) return data in same format
+  - Test that auth state management with onAuthStateChanged tracks user login status
+  - Test that logout functionality clears auth state and redirects to login
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [x] 3. Fix Firebase Auth Setup
+
+  - [x] 3.1 Update services/firebase.js with production config and Analytics
+    - Replace placeholder config values with production values using env var overrides
+    - Change apiKey from `import.meta.env.VITE_FIREBASE_API_KEY || "your-api-key"` to `import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAOB97HJHHsAbO5OQQ-kJtw3jyXU22A0bs"`
+    - Apply same pattern for authDomain (waautomation-13fa6.firebaseapp.com), projectId (waautomation-13fa6), storageBucket, messagingSenderId, appId, measurementId
+    - Import getAnalytics from 'firebase/analytics'
+    - Add Analytics initialization with browser-only guard: `typeof window !== 'undefined' ? getAnalytics(app) : null`
+    - Export analytics instance for future use
+    - Export onAuthStateChanged: `export { onAuthStateChanged } from 'firebase/auth';`
+    - _Bug_Condition: isBugCondition(input) where input.initializationCount > 1 OR input.config contains placeholders OR input.analyticsInitialized == false_
+    - _Expected_Behavior: Firebase initializes exactly once with production config, Analytics initialized with browser guards, onAuthStateChanged exported_
+    - _Preservation: Route protection, validation logic, Firestore operations, auth state management remain unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.2 Remove duplicate Firebase initialization from App.jsx
+    - Remove imports: initializeApp, getAuth, signInWithEmailAndPassword, signOut from 'firebase/auth'
+    - Remove firebaseConfig object (lines 8-15)
+    - Remove `const app = initializeApp(firebaseConfig);` (line 18)
+    - Remove `const auth = getAuth(app);` (line 19)
+    - Add import: `import { auth, onAuthStateChanged } from './services/firebase';`
+    - Verify auth state management logic remains unchanged
+    - Verify route protection logic remains unchanged
+    - Verify component imports and rendering remain unchanged
+    - _Bug_Condition: isBugCondition(input) where input.importSource == "firebase/auth" AND input.location == "App.jsx"_
+    - _Expected_Behavior: App.jsx imports from centralized service, no duplicate initialization_
+    - _Preservation: Auth state management, route protection, component rendering remain unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 3.5_
+
+  - [x] 3.3 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Single Firebase Initialization with Valid Config
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - Verify Firebase initializes exactly once
+    - Verify production config values are used (not placeholders)
+    - Verify App.jsx imports from services/firebase.js
+    - Verify Analytics is initialized
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+
+  - [x] 3.4 Verify preservation tests still pass
+    - **Property 2: Preservation** - Existing Auth Flow and Functionality
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm route protection still works
+    - Confirm form validation still works
+    - Confirm Firestore operations still work
+    - Confirm auth state management still works
+    - Confirm logout functionality still works
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

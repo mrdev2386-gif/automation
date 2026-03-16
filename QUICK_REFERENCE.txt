@@ -1,0 +1,147 @@
+# ⚡ Quick Reference Card
+**WA Automation - Instant Setup & Run**
+
+---
+
+## 🚀 Start System (2 Commands)
+
+```bash
+# Terminal 1: Start Emulators
+firebase emulators:start
+
+# Terminal 2: Start Dashboard
+cd dashboard && npm run dev
+```
+
+**Open**: http://localhost:5173
+
+---
+
+## 📦 First Time Setup
+
+```bash
+# Install dependencies
+cd functions && npm install puppeteer cheerio axios
+cd ../dashboard && npm install
+```
+
+---
+
+## 🧪 Test Flow
+
+1. **Login**: test@example.com / password123
+2. **Click**: "Lead Finder" in sidebar
+3. **Enter**: Niche: "software companies", Country: "USA"
+4. **Click**: "Start Search"
+5. **Wait**: Job completes (~2 min for 10 sites)
+6. **View**: Results tab shows discovered leads
+7. **Export**: Click "Export CSV"
+
+---
+
+## 🔍 Monitor Progress
+
+- **Dashboard**: Shows job status and progress
+- **Emulator UI**: http://127.0.0.1:4001
+- **Functions Logs**: Check Terminal 1
+- **Browser Console**: F12 → Console tab
+
+---
+
+## 🐛 Quick Fixes
+
+### "Cannot find module 'puppeteer'"
+```bash
+cd functions && npm install puppeteer cheerio axios
+```
+
+### "Port already in use"
+```bash
+taskkill /F /IM java.exe
+```
+
+### "Login error"
+- Email must be valid format
+- Password must be 6+ characters
+
+### "No results"
+- Check Functions terminal for errors
+- Verify emulators are running
+- Try different niche/country
+
+---
+
+## 📊 Emulator Ports
+
+| Service | Port | URL |
+|---------|------|-----|
+| Dashboard | 5173 | http://localhost:5173 |
+| Auth | 9100 | http://127.0.0.1:9100 |
+| Firestore | 8085 | http://127.0.0.1:8085 |
+| Functions | 5001 | http://127.0.0.1:5001 |
+| Emulator UI | 4001 | http://127.0.0.1:4001 |
+
+---
+
+## ✅ Success Indicators
+
+- ✅ Both terminals show no errors
+- ✅ Dashboard loads at localhost:5173
+- ✅ Can login with any email/password
+- ✅ Dashboard shows 2 tools (Lead Finder, AI Lead Agent)
+- ✅ Can start Lead Finder search
+- ✅ Job appears in Emulator UI
+- ✅ Leads appear in results
+- ✅ Can export to CSV
+
+---
+
+## 📁 Key Files
+
+| File | Purpose |
+|------|---------|
+| `FINAL_REPORT.md` | Complete audit results |
+| `STARTUP_GUIDE_COMPLETE.md` | Detailed instructions |
+| `COMPLETE_SYSTEM_AUDIT.md` | Technical analysis |
+| `setup-complete.bat` | Automated setup |
+
+---
+
+## 🎯 What Works
+
+✅ Login/Signup (auto)
+✅ Profile creation (auto)
+✅ Website discovery
+✅ Web scraping
+✅ Email extraction
+✅ Lead deduplication
+✅ Lead scoring
+✅ CSV/JSON export
+✅ Real-time progress
+✅ Error handling
+
+---
+
+## 🔮 Optional (Not Required)
+
+⚠️ OpenAI integration (AI qualification)
+⚠️ Email outreach automation
+⚠️ WhatsApp outreach automation
+⚠️ Campaign scheduler
+
+**Core system works perfectly without these!**
+
+---
+
+## 📞 Need Help?
+
+1. Check `STARTUP_GUIDE_COMPLETE.md` for detailed instructions
+2. Check `FINAL_REPORT.md` for troubleshooting
+3. Check Functions terminal for error logs
+4. Check Emulator UI for data verification
+
+---
+
+**Status**: 🟢 READY
+**Version**: 1.0.0
+**Last Updated**: 2024
