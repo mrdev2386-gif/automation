@@ -1134,189 +1134,11 @@ exports.getMyAutomations = functions.region("us-central1").https.onCall(async (d
 // LEAD FINDER TOOL FUNCTIONS
 // ============================================================================
 
+// Note: HTTP versions of startLeadFinder, getLeadFinderStatus, deleteLeadFinderLeads,
+// and getMyLeadFinderLeads are defined later in the file with proper CORS support.
+// The active exports point to those HTTP implementations.
+
 // Move service imports inside functions to avoid top-level async issues
-
-/**
- * startLeadFinder - Initialize lead finder job
- */
-exports.startLeadFinder = functions.region("us-central1").https.onCall(async (data, context) => {
-    // Check authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'unauthenticated',
-            'Authentication required'
-        );
-    }
-
-    try {
-        // Get user profile
-        const userDoc = await db.collection('users').doc(context.auth.uid).get();
-
-        if (!userDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'User profile not found');
-        }
-
-        const userData = userDoc.data();
-
-        // Check if user is active
-        if (!userData.isActive) {
-            throw new functions.https.HttpsError(
-                'permission-denied',
-                'User account is disabled'
-            );
-        }
-
-        // Check if user has lead_finder tool assigned
-        if (!userData.assignedAutomations || !userData.assignedAutomations.includes('lead_finder')) {
-            throw new functions.https.HttpsError(
-                'permission-denied',
-                'Lead Finder tool not assigned to your account'
-            );
-        }
-
-        // Validate input
-        if (!data.country || !data.niche) {
-            throw new functions.https.HttpsError(
-                'invalid-argument',
-                'Country and niche are required'
-            );
-        }
-
-        // Start the automated job (discovers websites automatically)
-        const { startAutomatedLeadFinder } = require('./src/services/leadFinderService');
-        const result = await startAutomatedLeadFinder(context.auth.uid, data.country, data.niche, data.limit);
-
-        // Log activity
-        await logActivity(context.auth.uid, 'LEAD_FINDER_STARTED', {
-            jobId: result.jobId,
-            country: data.country,
-            niche: data.niche,
-            limit: data.limit || 500
-        });
-
-        return result;
-    } catch (error) {
-        console.error('Error starting lead finder:', error);
-        throw new functions.https.HttpsError(
-            'internal',
-            error.message || 'Failed to start lead finder job'
-        );
-    }
-});
-
-/**
- * getLeadFinderStatus - Get job status
- */
-exports.getLeadFinderStatus = functions.region("us-central1").https.onCall(async (data, context) => {
-    // Check authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'unauthenticated',
-            'Authentication required'
-        );
-    }
-
-    try {
-        if (!data.jobId) {
-            throw new functions.https.HttpsError(
-                'invalid-argument',
-                'Job ID is required'
-            );
-        }
-
-        const { getJobStatus } = require('./src/services/leadFinderService');
-        const job = await getJobStatus(data.jobId);
-
-        if (!job) {
-            throw new functions.https.HttpsError('not-found', 'Job not found');
-        }
-
-        // Check authorization
-        if (job.userId !== context.auth.uid) {
-            // Allow super_admin to view
-            const userDoc = await db.collection('users').doc(context.auth.uid).get();
-            if (!userDoc.exists || userDoc.data().role !== 'super_admin') {
-                throw new functions.https.HttpsError(
-                    'permission-denied',
-                    'You do not have permission to view this job'
-                );
-            }
-        }
-
-        return { job };
-    } catch (error) {
-        console.error('Error getting job status:', error);
-        throw new functions.https.HttpsError(
-            'internal',
-            error.message || 'Failed to get job status'
-        );
-    }
-});
-
-/**
- * getMyLeadFinderLeads - Get user's leads from lead finder
- */
-exports.getMyLeadFinderLeads = functions.region("us-central1").https.onCall(async (data, context) => {
-    // Check authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'unauthenticated',
-            'Authentication required'
-        );
-    }
-
-    try {
-        const { getUserLeads, getUserJobs } = require('./src/services/leadFinderService');
-        const leads = await getUserLeads(context.auth.uid);
-        const jobs = await getUserJobs(context.auth.uid);
-
-        return { leads, jobs };
-    } catch (error) {
-        console.error('Error fetching leads:', error);
-        throw new functions.https.HttpsError(
-            'internal',
-            'Failed to fetch leads'
-        );
-    }
-});
-
-/**
- * deleteLeadFinderLeads - Delete specific leads
- */
-exports.deleteLeadFinderLeads = functions.region("us-central1").https.onCall(async (data, context) => {
-    // Check authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'unauthenticated',
-            'Authentication required'
-        );
-    }
-
-    try {
-        if (!data.leadIds || !Array.isArray(data.leadIds) || data.leadIds.length === 0) {
-            throw new functions.https.HttpsError(
-                'invalid-argument',
-                'Lead IDs array is required'
-            );
-        }
-
-        const { deleteLeads } = require('./src/services/leadFinderService');
-        const result = await deleteLeads(context.auth.uid, data.leadIds);
-
-        // Log activity
-        await logActivity(context.auth.uid, 'LEADS_DELETED', {
-            count: result.deleted
-        });
-
-        return result;
-    } catch (error) {
-        console.error('Error deleting leads:', error);
-        throw new functions.https.HttpsError(
-            'internal',
-            error.message || 'Failed to delete leads'
-        );
-    }
-});
 
 /**
  * submitWebsitesForScraping - Submit websites to scrape
@@ -1878,7 +1700,9 @@ exports.captureLead = functions.https.onRequest(async (req, res) => {
             sanitizeString
         } = require('./src/services/leadService');
         
-        const { name, email, phone, source, clientKey } = req.body;
+        // Support both formats: direct body and callable-style wrapped in 'data'
+        const body = req.body?.data ?? req.body ?? {};
+        const { name, email, phone, source, clientKey } = body;
 
         // Validate required fields
         if (!clientKey) {
@@ -1892,7 +1716,7 @@ exports.captureLead = functions.https.onRequest(async (req, res) => {
         }
 
         // Check payload size (prevent oversized requests)
-        const payloadSize = JSON.stringify(req.body).length;
+        const payloadSize = JSON.stringify(body).length;
         if (payloadSize > 100000) { // 100KB limit
             res.status(413).json({ error: 'Payload too large' });
             return;
@@ -4666,6 +4490,37 @@ exports.getMyLeadFinderLeadsHTTP = functions.https.onRequest(
     })
 );
 
+/**
+ * getMyLeadFinderLeads - HTTP version with CORS (alias for getMyLeadFinderLeadsHTTP)
+ */
+exports.getMyLeadFinderLeads = functions.https.onRequest((req, res) => {
+    return cors(req, res, async () => {
+        if (req.method === 'OPTIONS') {
+            return res.status(204).send('');
+        }
+
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const idToken = authHeader.split('Bearer ')[1];
+            const decodedToken = await admin.auth().verifyIdToken(idToken);
+            const userId = decodedToken.uid;
+
+            const { getUserLeads, getUserJobs } = require('./src/services/leadFinderService');
+            const leads = await getUserLeads(userId);
+            const jobs = await getUserJobs(userId);
+
+            return res.status(200).json({ leads, jobs });
+        } catch (error) {
+            console.error('Error fetching leads:', error);
+            return res.status(500).json({ error: error.message || 'Failed to fetch leads' });
+        }
+    });
+});
+
 // ============================================================================
 // EMULATOR HELPER - Seed Test User
 // ============================================================================
@@ -4862,9 +4717,12 @@ exports.startLeadFinderHTTP = functions.https.onRequest((req, res) => {
                 return res.status(403).json({ error: 'Lead Finder tool not assigned to your account' });
             }
 
-            const { country, niche, limit } = req.body;
+            // Support both formats: direct body and callable-style wrapped in 'data'
+            const body = req.body?.data ?? req.body ?? {};
+            const { country, niche, limit } = body;
+            
             if (!country || !niche) {
-                return res.status(400).json({ error: 'Country and niche are required' });
+                return res.status(400).json({ error: 'invalid-argument', message: 'country and niche are required' });
             }
 
             const { startAutomatedLeadFinder } = require('./src/services/leadFinderService');
@@ -4886,6 +4744,11 @@ exports.startLeadFinderHTTP = functions.https.onRequest((req, res) => {
 });
 
 /**
+ * startLeadFinder - HTTP version with CORS (delegates to startLeadFinderHTTP)
+ */
+exports.startLeadFinder = exports.startLeadFinderHTTP;
+
+/**
  * getLeadFinderStatusHTTP - HTTP version with CORS support
  */
 exports.getLeadFinderStatusHTTP = functions.https.onRequest((req, res) => {
@@ -4904,9 +4767,12 @@ exports.getLeadFinderStatusHTTP = functions.https.onRequest((req, res) => {
             const decodedToken = await admin.auth().verifyIdToken(idToken);
             const userId = decodedToken.uid;
 
-            const { jobId } = req.body;
+            // Support both formats: direct body and callable-style wrapped in 'data'
+            const body = req.body?.data ?? req.body ?? {};
+            const { jobId } = body;
+            
             if (!jobId) {
-                return res.status(400).json({ error: 'Job ID is required' });
+                return res.status(400).json({ error: 'invalid-argument', message: 'jobId is required' });
             }
 
             const { getJobStatus } = require('./src/services/leadFinderService');
@@ -4931,6 +4797,11 @@ exports.getLeadFinderStatusHTTP = functions.https.onRequest((req, res) => {
 });
 
 /**
+ * getLeadFinderStatus - HTTP version with CORS (delegates to getLeadFinderStatusHTTP)
+ */
+exports.getLeadFinderStatus = exports.getLeadFinderStatusHTTP;
+
+/**
  * deleteLeadFinderLeadsHTTP - HTTP version with CORS support
  */
 exports.deleteLeadFinderLeadsHTTP = functions.https.onRequest((req, res) => {
@@ -4949,9 +4820,12 @@ exports.deleteLeadFinderLeadsHTTP = functions.https.onRequest((req, res) => {
             const decodedToken = await admin.auth().verifyIdToken(idToken);
             const userId = decodedToken.uid;
 
-            const { leadIds } = req.body;
+            // Support both formats: direct body and callable-style wrapped in 'data'
+            const body = req.body?.data ?? req.body ?? {};
+            const { leadIds } = body;
+            
             if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
-                return res.status(400).json({ error: 'Lead IDs array is required' });
+                return res.status(400).json({ error: 'invalid-argument', message: 'leadIds array is required' });
             }
 
             const { deleteLeads } = require('./src/services/leadFinderService');
@@ -4968,6 +4842,11 @@ exports.deleteLeadFinderLeadsHTTP = functions.https.onRequest((req, res) => {
         }
     });
 });
+
+/**
+ * deleteLeadFinderLeads - HTTP version with CORS (delegates to deleteLeadFinderLeadsHTTP)
+ */
+exports.deleteLeadFinderLeads = exports.deleteLeadFinderLeadsHTTP;
 
 
 
