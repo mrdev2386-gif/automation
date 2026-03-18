@@ -12,21 +12,24 @@ const admin = require('firebase-admin');
 // ============================================================================
 /**
  * Build search queries for a niche and country
- * UPGRADED: More comprehensive query generation
+ * UPGRADED: More comprehensive query generation with better results
  */
 const buildSearchQueries = (niche, country) => {
     const queries = [];
-    // Base queries (expanded)
-    queries.push(`${niche} companies in ${country}`);
+    // Primary queries (most effective)
+    queries.push(`top ${niche} companies in ${country}`);
+    queries.push(`best ${niche} in ${country}`);
+    queries.push(`${niche} businesses in ${country}`);
+    queries.push(`${niche} companies ${country}`);
+    // Secondary queries
     queries.push(`${niche} startups in ${country}`);
-    queries.push(`top ${niche} companies`);
     queries.push(`${niche} agencies`);
     queries.push(`${niche} services companies`);
-    queries.push(`best ${niche} in ${country}`);
-    queries.push(`${niche} businesses ${country}`);
     queries.push(`${niche} firms ${country}`);
     queries.push(`${niche} providers ${country}`);
     queries.push(`leading ${niche} companies ${country}`);
+    queries.push(`${niche} directory ${country}`);
+    queries.push(`${niche} list ${country}`);
     // Industry-specific variations
     if (niche.toLowerCase().includes('real estate')) {
         queries.push(`property agents ${country}`);
@@ -47,7 +50,7 @@ const buildSearchQueries = (niche, country) => {
 /**
  * Search websites using SerpAPI
  * Free tier available, requires API key for high volume
- * UPGRADED: Supports per-user API keys
+ * UPGRADED: Supports per-user API keys with fallback queries
  * @param {Array} queries - Search queries
  * @param {number} limit - Result limit
  * @param {string} userSerpApiKey - User's personal SERP API key (optional, overrides global)
@@ -64,6 +67,7 @@ const searchWithSerpAPI = async (queries, limit = 100, userSerpApiKey = null) =>
         const websites = new Set();
         for (const query of queries) {
             try {
+                console.log(`🔍 Searching: "${query}"`);
                 const response = await axios.get('https://serpapi.com/search', {
                     params: {
                         q: query,
@@ -80,6 +84,7 @@ const searchWithSerpAPI = async (queries, limit = 100, userSerpApiKey = null) =>
                             websites.add(result.link);
                         }
                     }
+                    console.log(`Found ${response.data.organic_results.length} results, total: ${websites.size}`);
                 }
                 // Respect rate limiting
                 await new Promise(resolve => setTimeout(resolve, 300));
@@ -154,6 +159,30 @@ const getUserSerpApiKeys = async (userId) => {
         return [];
     }
 };
+/**
+ * Call SerpAPI with a single query string
+ * @param {string} query
+ * @param {string|null} apiKey
+ * @returns {Promise<string[]>} array of URLs
+ */
+const callSerpAPI = async (query, apiKey = null) => {
+    const key = apiKey || process.env.SERPAPI_API_KEY;
+    if (!key) {
+        console.warn('No SERP API key configured');
+        return [];
+    }
+    try {
+        const response = await axios.get('https://serpapi.com/search', {
+            params: { q: query, api_key: key, engine: 'google', num: 50 },
+            timeout: 10000
+        });
+        return (response.data.organic_results || []).map(r => r.link).filter(Boolean);
+    }
+    catch (error) {
+        console.error('callSerpAPI error:', error.message);
+        return [];
+    }
+};
 // Track current key index for rotation (in-memory, resets on function restart)
 const keyRotationIndex = new Map();
 /**
@@ -175,7 +204,7 @@ const getNextSerpApiKey = (userId, keys) => {
 };
 /**
  * Search and collect websites for a niche and country
- * UPGRADED: Fetches per-user API key from Firestore
+ * UPGRADED: Fetches per-user API key from Firestore with fallback queries
  * @param {string} niche - Target niche
  * @param {string} country - Target country
  * @param {number} limit - Result limit
@@ -184,35 +213,23 @@ const getNextSerpApiKey = (userId, keys) => {
  */
 const searchWebsites = async (niche, country, limit = 100, useAPI = true, userId = null) => {
     try {
-        console.log(`🔍 Searching websites for ${niche} in ${country}`);
-        // Build search queries
-        const queries = buildSearchQueries(niche, country);
-        let websites = [];
-        // Try API first if enabled
-        if (useAPI) {
-            // Fetch user's API keys if userId provided
-            let userApiKeys = [];
-            if (userId) {
-                userApiKeys = await getUserSerpApiKeys(userId);
-                if (userApiKeys.length > 0) {
-                    console.log(`✅ Using user's personal SERP API keys (${userApiKeys.length} keys)`);
-                }
-            }
-            // Get next key using rotation
-            const userApiKey = userApiKeys.length > 0 ? getNextSerpApiKey(userId, userApiKeys) : null;
-            websites = await searchWithSerpAPI(queries, limit, userApiKey);
+        const query = `${niche} in ${country}`;
+        console.log("SEARCH QUERY:", query);
+        let userApiKeys = [];
+        if (userId) {
+            userApiKeys = await getUserSerpApiKeys(userId);
         }
-        // Use fallback if no results from API
-        if (websites.length < limit / 2) {
-            const fallback = getFallbackWebsites(niche, country, limit - websites.length);
-            websites = [...new Set([...websites, ...fallback])]; // Remove duplicates
-        }
-        console.log(`✅ Found ${websites.length} websites for ${niche} in ${country}`);
-        return websites.slice(0, limit);
+        const userApiKey = userApiKeys.length > 0 ? getNextSerpApiKey(userId, userApiKeys) : null;
+        const results = await callSerpAPI(query, userApiKey);
+        console.log("RAW SERP RESPONSE:", JSON.stringify(results, null, 2));
+        console.log("RAW RESULTS COUNT:", results?.length);
+        const websites = results || [];
+        console.log("FINAL WEBSITES COUNT:", websites.length);
+        return websites.slice(0, 20);
     }
     catch (error) {
         console.error('Error searching websites:', error);
-        return getFallbackWebsites(niche, country, limit); // Fallback
+        return [];
     }
 };
 /**
@@ -251,6 +268,7 @@ const validateWebsites = (websites) => {
 // ============================================================================
 module.exports = {
     buildSearchQueries,
+    callSerpAPI,
     searchWithSerpAPI,
     searchWebsites,
     validateWebsites,

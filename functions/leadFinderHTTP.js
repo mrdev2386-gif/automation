@@ -20,38 +20,46 @@ const startLeadFinder = functions.region("us-central1").https.onRequest((req, re
         }
 
         try {
-            console.log('startLeadFinder - Request received');
-            console.log('Body:', JSON.stringify(req.body));
+            console.log('🚀 startLeadFinder - Request received');
+            console.log('📋 Body:', JSON.stringify(req.body));
+            console.log('🔑 Headers:', JSON.stringify(req.headers));
 
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                console.error('❌ Missing or invalid authorization header');
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
             const idToken = authHeader.split('Bearer ')[1];
             const decodedToken = await admin.auth().verifyIdToken(idToken);
             const userId = decodedToken.uid;
-            console.log('User ID:', userId);
+            console.log('✅ User authenticated:', userId);
 
             // Validate user
             const userDoc = await db.collection('users').doc(userId).get();
             if (!userDoc.exists) {
+                console.error('❌ User profile not found:', userId);
                 return res.status(404).json({ error: 'User profile not found' });
             }
             
             const userData = userDoc.data();
+            console.log('👤 User data:', JSON.stringify({ role: userData.role, isActive: userData.isActive, assignedAutomations: userData.assignedAutomations }));
+            
             if (!userData.isActive) {
+                console.error('❌ User account is disabled:', userId);
                 return res.status(403).json({ error: 'User account is disabled' });
             }
             if (!userData.assignedAutomations || !userData.assignedAutomations.includes('lead_finder')) {
+                console.error('❌ Lead Finder not assigned to user:', userId);
                 return res.status(403).json({ error: 'Lead Finder tool not assigned to your account' });
             }
 
             // Extract parameters
             const { country, niche, limit } = req.body;
-            console.log('Input:', { country, niche, limit });
+            console.log('📊 Input parameters:', { country, niche, limit });
             
             if (!country || !niche) {
+                console.error('❌ Missing required fields');
                 return res.status(400).json({ error: 'Missing required fields: country or niche' });
             }
 
@@ -64,6 +72,7 @@ const startLeadFinder = functions.region("us-central1").https.onRequest((req, re
                 userId,
                 country,
                 niche,
+                limit: limit || 500,
                 status: 'queued',
                 progress: {
                     websitesScanned: 0,
@@ -77,7 +86,8 @@ const startLeadFinder = functions.region("us-central1").https.onRequest((req, re
             };
 
             await jobRef.set(job);
-            console.log('Job created:', jobRef.id);
+            console.log('✅ Job created successfully:', jobRef.id);
+            console.log('📝 Job document path: lead_finder_jobs/' + jobRef.id);
 
             // Log activity
             await logActivity(userId, 'LEAD_FINDER_STARTED', {
@@ -87,6 +97,9 @@ const startLeadFinder = functions.region("us-central1").https.onRequest((req, re
                 limit: limit || 500
             });
 
+            console.log('✅ Activity logged successfully');
+            console.log('🎯 Firestore trigger should fire now for: lead_finder_jobs/' + jobRef.id);
+
             return res.status(200).json({
                 jobId: jobRef.id,
                 status: 'queued',
@@ -95,8 +108,8 @@ const startLeadFinder = functions.region("us-central1").https.onRequest((req, re
                 message: `🚀 Lead Finder job started. Preparing to scan for ${niche} businesses in ${country}.`
             });
         } catch (error) {
-            console.error('START LEAD FINDER ERROR:', error);
-            console.error('Stack:', error.stack);
+            console.error('❌ START LEAD FINDER ERROR:', error);
+            console.error('📚 Stack:', error.stack);
             return res.status(500).json({ error: error.message || 'Failed to start lead finder' });
         }
     });
@@ -199,15 +212,19 @@ const deleteLeadFinderLeads = functions.region("us-central1").https.onRequest((r
 /**
  * getMyLeadFinderLeads - HTTP endpoint
  */
-const getMyLeadFinderLeads = functions.https.onRequest((req, res) => {
+const getMyLeadFinderLeads = functions.region('us-central1').https.onRequest((req, res) => {
     return cors(req, res, async () => {
         if (req.method === 'OPTIONS') {
             return res.status(204).send('');
         }
 
         try {
+            console.log('📊 getMyLeadFinderLeads - Request received');
+            console.log('🔑 Method:', req.method);
+            
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                console.error('❌ Missing or invalid authorization header');
                 return res.status(401).json({ error: 'Unauthorized' });
             }
 
@@ -215,7 +232,8 @@ const getMyLeadFinderLeads = functions.https.onRequest((req, res) => {
             const decodedToken = await admin.auth().verifyIdToken(idToken);
             const userId = decodedToken.uid;
             
-            console.log('Fetching leads for user:', userId);
+            console.log('✅ User authenticated:', userId);
+            console.log('🔍 Fetching leads for user:', userId);
 
             // Fetch leads
             let leadsSnapshot;
@@ -226,8 +244,9 @@ const getMyLeadFinderLeads = functions.https.onRequest((req, res) => {
                     .where('source', '==', 'lead_finder')
                     .limit(100)
                     .get();
+                console.log('✅ Leads query with source filter succeeded');
             } catch (queryError) {
-                console.warn('Query with source filter failed, trying without filter:', queryError.message);
+                console.warn('⚠️ Query with source filter failed, trying without filter:', queryError.message);
                 leadsSnapshot = await db
                     .collection('leads')
                     .where('userId', '==', userId)
@@ -240,7 +259,7 @@ const getMyLeadFinderLeads = functions.https.onRequest((req, res) => {
                 ...doc.data()
             }));
 
-            console.log('Leads found:', leads.length);
+            console.log('✅ Leads found:', leads.length);
 
             // Fetch jobs
             let jobsSnapshot;
@@ -251,8 +270,9 @@ const getMyLeadFinderLeads = functions.https.onRequest((req, res) => {
                     .orderBy('createdAt', 'desc')
                     .limit(20)
                     .get();
+                console.log('✅ Jobs query with orderBy succeeded');
             } catch (jobError) {
-                console.warn('Failed to fetch jobs with orderBy, trying without:', jobError.message);
+                console.warn('⚠️ Failed to fetch jobs with orderBy, trying without:', jobError.message);
                 try {
                     jobsSnapshot = await db
                         .collection('lead_finder_jobs')
@@ -260,7 +280,7 @@ const getMyLeadFinderLeads = functions.https.onRequest((req, res) => {
                         .limit(20)
                         .get();
                 } catch (fallbackError) {
-                    console.warn('Failed to fetch jobs:', fallbackError.message);
+                    console.warn('⚠️ Failed to fetch jobs:', fallbackError.message);
                     jobsSnapshot = { docs: [] };
                 }
             }
@@ -270,14 +290,16 @@ const getMyLeadFinderLeads = functions.https.onRequest((req, res) => {
                 ...doc.data()
             }));
 
-            console.log('Jobs found:', jobs.length);
+            console.log('✅ Jobs found:', jobs.length);
+            console.log('📦 Returning response with', leads.length, 'leads and', jobs.length, 'jobs');
 
             return res.status(200).json({
                 leads,
                 jobs
             });
         } catch (error) {
-            console.error('ERROR in getMyLeadFinderLeads:', error);
+            console.error('❌ ERROR in getMyLeadFinderLeads:', error);
+            console.error('📚 Stack:', error.stack);
             return res.status(500).json({ error: error.message || 'Internal server error' });
         }
     });

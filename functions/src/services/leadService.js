@@ -405,6 +405,102 @@ const checkLeadRateLimit = async (clientUserId, ip = null) => {
 };
 
 // ============================================================================
+// BULK OPERATIONS
+// ============================================================================
+
+/**
+ * Process bulk lead upload
+ */
+const processBulkLeads = async (clientUserId, leads, source = 'bulk_upload') => {
+    const results = {
+        processed: 0,
+        errors: 0,
+        errorDetails: []
+    };
+
+    for (const leadData of leads) {
+        try {
+            // Validate required fields
+            if (!leadData.email && !leadData.phone) {
+                results.errors++;
+                results.errorDetails.push({
+                    lead: leadData,
+                    error: 'Email or phone required'
+                });
+                continue;
+            }
+
+            // Check for duplicates
+            const duplicate = await checkDuplicate(
+                clientUserId,
+                leadData.email,
+                leadData.phone
+            );
+
+            if (duplicate.isDuplicate) {
+                results.errors++;
+                results.errorDetails.push({
+                    lead: leadData,
+                    error: 'Duplicate lead'
+                });
+                continue;
+            }
+
+            // Create lead
+            await createLead({
+                clientUserId,
+                name: leadData.name || '',
+                email: leadData.email,
+                phone: leadData.phone,
+                source,
+                metadata: leadData.metadata || {},
+                status: 'new'
+            });
+
+            results.processed++;
+        } catch (error) {
+            results.errors++;
+            results.errorDetails.push({
+                lead: leadData,
+                error: error.message
+            });
+        }
+    }
+
+    return results;
+};
+
+/**
+ * Get leads for a specific user
+ */
+const getUserLeads = async (clientUserId, filters = {}) => {
+    const db = admin.firestore();
+    let query = db.collection('leads').where('clientUserId', '==', clientUserId);
+
+    // Apply filters
+    if (filters.status) {
+        query = query.where('status', '==', filters.status);
+    }
+
+    if (filters.source) {
+        query = query.where('source', '==', filters.source);
+    }
+
+    // Order by creation date
+    query = query.orderBy('createdAt', 'desc');
+
+    // Limit results
+    const limit = filters.limit || 100;
+    query = query.limit(limit);
+
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+};
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -413,6 +509,8 @@ module.exports = {
     createLead,
     checkDuplicate,
     triggerLeadAutomation,
+    processBulkLeads,
+    getUserLeads,
 
     // Utilities
     isValidPhone,

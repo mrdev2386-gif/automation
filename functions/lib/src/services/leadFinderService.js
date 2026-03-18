@@ -430,7 +430,9 @@ const startAutomatedLeadFinder = async (userId, country, niche, limit = 500) => 
             console.warn('⚠️ Apify discovery failed:', apifyError.message);
         }
         if (validWebsites.length === 0 && apifyLeads.length === 0) {
-            throw new Error('No websites found for the given niche and country. Try a different search term.');
+            console.log('No websites found at initial stage, but continuing with queue processing');
+            // Do NOT throw error
+            // Allow job to proceed
         }
         // Create job record
         const jobRef = db.collection('lead_finder_jobs').doc();

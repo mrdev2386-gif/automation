@@ -154,11 +154,16 @@ const getAllAutomations = functions.region("us-central1").https.onCall(async (da
  * Called on first use to initialize the tool
  */
 const ensureLeadFinderAutomation = functions.region("us-central1").https.onCall(async (data, context) => {
+    console.log('🔍 ensureLeadFinderAutomation called');
+    console.log('📋 Input data:', JSON.stringify(data));
+    console.log('👤 Context auth:', context.auth ? context.auth.uid : 'NO AUTH');
     try {
         const leadFinderRef = db.collection('automations').doc('lead_finder');
         const leadFinderDoc = await leadFinderRef.get();
+        console.log('📊 Lead Finder doc exists:', leadFinderDoc.exists);
         if (!leadFinderDoc.exists) {
             // Create the Lead Finder automation
+            console.log('✨ Creating Lead Finder automation...');
             await leadFinderRef.set({
                 id: 'lead_finder',
                 name: 'Lead Finder',
@@ -181,14 +186,26 @@ const ensureLeadFinderAutomation = functions.region("us-central1").https.onCall(
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
-            console.log('✅ Lead Finder automation created');
-            return { status: 'created', message: 'Lead Finder automation initialized' };
+            console.log('✅ Lead Finder automation created successfully');
+            return {
+                success: true,
+                status: 'created',
+                message: 'Lead Finder automation initialized'
+            };
         }
-        return { status: 'exists', message: 'Lead Finder automation already exists' };
+        console.log('✅ Lead Finder automation already exists');
+        return {
+            success: true,
+            status: 'exists',
+            message: 'Lead Finder automation already exists'
+        };
     }
     catch (error) {
-        console.error('Error ensuring Lead Finder automation:', error);
-        throw new functions.https.HttpsError('internal', 'Failed to initialize Lead Finder automation');
+        console.error('❌ Error ensuring Lead Finder automation:', error);
+        console.error('❌ Error stack:', error.stack);
+        console.error('❌ Error code:', error.code);
+        console.error('❌ Error message:', error.message);
+        throw new functions.https.HttpsError('internal', `Failed to initialize Lead Finder automation: ${error.message}`);
     }
 });
 /**

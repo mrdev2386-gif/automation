@@ -344,27 +344,144 @@ const getMyLeadFinderLeadsHTTP = functions.https.onRequest((req, res) => {
         if (req.method === 'OPTIONS') {
             return res.status(204).send('');
         }
+        if (req.method !== 'GET' && req.method !== 'POST') {
+            return res.status(405).json({ error: 'Method not allowed' });
+        }
         try {
+            console.log('getMyLeadFinderLeads - Request received, method:', req.method);
+            // Extract token manually
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                console.error('getMyLeadFinderLeads - Missing or invalid authorization header');
                 return res.status(401).json({ error: 'Unauthorized' });
             }
             const idToken = authHeader.split('Bearer ')[1];
             const decodedToken = await admin.auth().verifyIdToken(idToken);
             const userId = decodedToken.uid;
-            const { getUserLeads, getUserJobs } = require('./src/services/leadFinderService');
-            const leads = await getUserLeads(userId);
-            const jobs = await getUserJobs(userId);
-            return res.status(200).json({ leads, jobs });
+            console.log('User ID:', userId);
+            if (!userId) {
+                console.error('getMyLeadFinderLeads - User ID is undefined');
+                return res.status(401).json({ error: 'User not authenticated' });
+            }
+            // Fetch leads from Firestore - query leads collection with source filter
+            console.log('Fetching leads for user:', userId);
+            let leadsSnapshot;
+            try {
+                leadsSnapshot = await admin
+                    .firestore()
+                    .collection('leads')
+                    .where('userId', '==', userId)
+                    .where('source', '==', 'lead_finder')
+                    .limit(100)
+                    .get();
+            }
+            catch (queryError) {
+                console.warn('Query with source filter failed, trying without filter:', queryError.message);
+                // Fallback to leads collection without source filter
+                leadsSnapshot = await admin
+                    .firestore()
+                    .collection('leads')
+                    .where('userId', '==', userId)
+                    .limit(100)
+                    .get();
+            }
+            const leads = leadsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            console.log('Leads found:', leads.length);
+            // Fetch jobs from Firestore
+            let jobsSnapshot;
+            try {
+                jobsSnapshot = await admin
+                    .firestore()
+                    .collection('lead_finder_jobs')
+                    .where('userId', '==', userId)
+                    .orderBy('createdAt', 'desc')
+                    .limit(20)
+                    .get();
+            }
+            catch (jobError) {
+                console.warn('Failed to fetch jobs with orderBy, trying without:', jobError.message);
+                try {
+                    jobsSnapshot = await admin
+                        .firestore()
+                        .collection('lead_finder_jobs')
+                        .where('userId', '==', userId)
+                        .limit(20)
+                        .get();
+                }
+                catch (fallbackError) {
+                    console.warn('Failed to fetch jobs:', fallbackError.message);
+                    jobsSnapshot = { docs: [] };
+                }
+            }
+            const jobs = jobsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            console.log('Jobs found:', jobs.length);
+            return res.status(200).json({
+                leads,
+                jobs
+            });
         }
         catch (error) {
-            console.error('Error fetching leads:', error);
-            return res.status(500).json({ error: error.message || 'Failed to fetch leads' });
+            console.error('ERROR in getMyLeadFinderLeads:', error);
+            return res.status(500).json({ error: error.message || 'Internal server error' });
         }
     });
 });
 /**
- * startLeadFinderHTTP - HTTP version with CORS support
+ * startLeadFinderCallable - Callable version for Firebase SDK
+ */
+const startLeadFinderCallable = functions.region("us-central1").https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+    try {
+        console.log('startLeadFinder (callable) - Request received');
+        console.log('Request data:', data);
+        const userId = context.auth.uid;
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists)
+            throw new functions.https.HttpsError('not-found', 'User profile not found');
+        const userData = userDoc.data();
+        if (!userData.isActive)
+            throw new functions.https.HttpsError('permission-denied', 'User account is disabled');
+        if (!userData.assignedAutomations || !userData.assignedAutomations.includes('lead_finder')) {
+            throw new functions.https.HttpsError('permission-denied', 'Lead Finder tool not assigned to your account');
+        }
+        // Extract parameters with fallback support
+        const country = data.country || data.targetCountry;
+        const niche = data.niche || data.targetNiche;
+        const limit = data.limit || data.maxWebsites || 500;
+        console.log('Lead Finder Input:', { country, niche, limit });
+        // Validate inputs
+        if (!country || !niche) {
+            throw new functions.https.HttpsError('invalid-argument', 'Missing required fields: country or niche');
+        }
+        const { startAutomatedLeadFinder } = require('./src/services/leadFinderService');
+        const result = await startAutomatedLeadFinder(userId, country, niche, limit);
+        await logActivity(userId, 'LEAD_FINDER_STARTED', {
+            jobId: result.jobId,
+            country,
+            niche,
+            limit
+        });
+        console.log('Lead Finder job started:', result.jobId);
+        return result;
+    }
+    catch (error) {
+        console.error('START LEAD FINDER ERROR:', error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        throw new functions.https.HttpsError('internal', error.message || 'Failed to start lead finder');
+    }
+});
+/**
+ * startLeadFinderHTTP - HTTP version with CORS support (for direct HTTP calls)
  */
 const startLeadFinderHTTP = functions.https.onRequest((req, res) => {
     return cors(req, res, async () => {
@@ -372,6 +489,8 @@ const startLeadFinderHTTP = functions.https.onRequest((req, res) => {
             return res.status(204).send('');
         }
         try {
+            console.log('startLeadFinder - Request received, method:', req.method);
+            console.log('Request body:', req.body);
             const authHeader = req.headers.authorization;
             if (!authHeader || !authHeader.startsWith('Bearer ')) {
                 return res.status(401).json({ error: 'Unauthorized' });
@@ -388,10 +507,17 @@ const startLeadFinderHTTP = functions.https.onRequest((req, res) => {
             if (!userData.assignedAutomations || !userData.assignedAutomations.includes('lead_finder')) {
                 return res.status(403).json({ error: 'Lead Finder tool not assigned to your account' });
             }
+            // Extract request body with fallback support
             const body = req.body?.data ?? req.body ?? {};
-            const { country, niche, limit } = body;
+            const country = body.country || body.targetCountry;
+            const niche = body.niche || body.targetNiche;
+            const limit = body.limit || body.maxWebsites || 500;
+            console.log('Lead Finder Input:', { country, niche, limit });
+            // Validate inputs
             if (!country || !niche) {
-                return res.status(400).json({ error: 'invalid-argument', message: 'country and niche are required' });
+                return res.status(400).json({
+                    error: 'Missing required fields: country or niche'
+                });
             }
             const { startAutomatedLeadFinder } = require('./src/services/leadFinderService');
             const result = await startAutomatedLeadFinder(userId, country, niche, limit);
@@ -399,13 +525,14 @@ const startLeadFinderHTTP = functions.https.onRequest((req, res) => {
                 jobId: result.jobId,
                 country,
                 niche,
-                limit: limit || 500
+                limit
             });
+            console.log('Lead Finder job started:', result.jobId);
             return res.status(200).json(result);
         }
         catch (error) {
-            console.error('Error starting lead finder:', error);
-            return res.status(500).json({ error: error.message || 'Failed to start lead finder job' });
+            console.error('START LEAD FINDER ERROR:', error);
+            return res.status(500).json({ error: error.message || 'Failed to start lead finder' });
         }
     });
 });
@@ -486,8 +613,9 @@ module.exports = {
     saveWebhookConfig,
     getMyLeadFinderLeadsHTTP,
     getMyLeadFinderLeads: getMyLeadFinderLeadsHTTP,
+    startLeadFinderCallable,
+    startLeadFinder: startLeadFinderCallable,
     startLeadFinderHTTP,
-    startLeadFinder: startLeadFinderHTTP,
     getLeadFinderStatusHTTP,
     getLeadFinderStatus: getLeadFinderStatusHTTP,
     deleteLeadFinderLeadsHTTP,

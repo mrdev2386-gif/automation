@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { getApp } from 'firebase/app';
 import { httpsCallable } from 'firebase/functions';
-import { auth, functions } from '../services/firebase';
+import { auth, functions, callFunction } from '../services/firebase';
 import {
     Search,
     Loader2,
@@ -109,20 +109,8 @@ const LeadFinder = () => {
             const user = auth.currentUser;
             if (!user) return;
 
-            const token = await user.getIdToken();
-            const response = await fetch(
-                'https://us-central1-waautomation-13fa6.cloudfunctions.net/getLeadFinderStatus',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ jobId: currentJobId })
-                }
-            );
-
-            const result = await response.json();
+            console.log('🔥 USING httpsCallable: getLeadFinderStatus');
+            const result = await callFunction('getLeadFinderStatus', { jobId: currentJobId });
             const job = result.job;
             setJobStatus(job);
 
@@ -164,29 +152,14 @@ const LeadFinder = () => {
                 return;
             }
 
-            const token = await user.getIdToken();
-            const response = await fetch(
-                'https://us-central1-waautomation-13fa6.cloudfunctions.net/startLeadFinder',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        country: formData.country,
-                        niche: formData.niche,
-                        limit: formData.limit
-                    })
-                }
-            );
-
-            const result = await response.json();
+            console.log('🔥 USING httpsCallable: startLeadFinder');
+            const result = await callFunction('startLeadFinder', {
+                country: formData.country,
+                niche: formData.niche,
+                limit: formData.limit
+            });
+            
             console.log('Start Lead Finder Response:', result);
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Failed to start lead finder');
-            }
 
             setCurrentJobId(result.jobId);
             setProcessing(true);
@@ -211,23 +184,8 @@ const LeadFinder = () => {
                 return;
             }
 
-            const token = await user.getIdToken();
-            const response = await fetch(
-                'https://us-central1-waautomation-13fa6.cloudfunctions.net/getMyLeadFinderLeads',
-                {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const result = await response.json();
+            console.log('🔥 USING httpsCallable: getMyLeadFinderLeads');
+            const result = await callFunction('getMyLeadFinderLeads');
             console.log('API RESPONSE:', result);
 
             if (!result) {
@@ -267,26 +225,10 @@ const LeadFinder = () => {
                 return;
             }
 
-            const token = await user.getIdToken();
             const leadIds = Array.from(selectedLeads);
             
-            const response = await fetch(
-                'https://us-central1-waautomation-13fa6.cloudfunctions.net/deleteLeadFinderLeads',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ leadIds })
-                }
-            );
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Failed to delete leads');
-            }
+            console.log('🔥 USING httpsCallable: deleteLeadFinderLeads');
+            const result = await callFunction('deleteLeadFinderLeads', { leadIds });
 
             setSelectedLeads(new Set());
             await fetchLeads();

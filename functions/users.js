@@ -16,39 +16,41 @@ const { isSuperAdmin, logActivity, isValidEmail } = require('./auth');
  * createUser - Create a new user (super_admin only)
  */
 const createUser = functions.region("us-central1").https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
-    }
-
-    const isAdmin = await isSuperAdmin(context.auth.uid);
-    if (!isAdmin) {
-        await logActivity(context.auth.uid, 'UNAUTHORIZED_USER_CREATE_ATTEMPT', {
-            attemptedEmail: data.email
-        });
-        throw new functions.https.HttpsError('permission-denied', 'Only super_admin can create users');
-    }
-
-    if (!data.email || !data.password || !data.role) {
-        throw new functions.https.HttpsError('invalid-argument', 'Email, password, and role are required');
-    }
-
-    if (!isValidEmail(data.email)) {
-        throw new functions.https.HttpsError('invalid-argument', 'Invalid email format');
-    }
-
-    if (data.password.length < 8) {
-        throw new functions.https.HttpsError('invalid-argument', 'Password must be at least 8 characters');
-    }
-
-    if (!['super_admin', 'client_user'].includes(data.role)) {
-        throw new functions.https.HttpsError('invalid-argument', 'Role must be either super_admin or client_user');
-    }
-
-    if (data.assignedAutomations && !validateTools(data.assignedAutomations)) {
-        throw new functions.https.HttpsError('invalid-argument', 'Invalid automation tool assigned');
-    }
-
     try {
+        console.log('👤 createUser called');
+        
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+        }
+
+        const isAdmin = await isSuperAdmin(context.auth.uid);
+        if (!isAdmin) {
+            await logActivity(context.auth.uid, 'UNAUTHORIZED_USER_CREATE_ATTEMPT', {
+                attemptedEmail: data.email
+            });
+            throw new functions.https.HttpsError('permission-denied', 'Only super_admin can create users');
+        }
+
+        if (!data.email || !data.password || !data.role) {
+            throw new functions.https.HttpsError('invalid-argument', 'Email, password, and role are required');
+        }
+
+        if (!isValidEmail(data.email)) {
+            throw new functions.https.HttpsError('invalid-argument', 'Invalid email format');
+        }
+
+        if (data.password.length < 8) {
+            throw new functions.https.HttpsError('invalid-argument', 'Password must be at least 8 characters');
+        }
+
+        if (!['super_admin', 'client_user'].includes(data.role)) {
+            throw new functions.https.HttpsError('invalid-argument', 'Role must be either super_admin or client_user');
+        }
+
+        if (data.assignedAutomations && !validateTools(data.assignedAutomations)) {
+            throw new functions.https.HttpsError('invalid-argument', 'Invalid automation tool assigned');
+        }
+
         const clientKey = `client_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 
         const userRecord = await auth.createUser({
@@ -80,13 +82,17 @@ const createUser = functions.region("us-central1").https.onCall(async (data, con
             message: 'User created successfully'
         };
     } catch (error) {
-        console.error('Error creating user:', error);
+        console.error('❌ createUser error:', error);
+
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
 
         if (error.code === 'auth/email-already-exists') {
             throw new functions.https.HttpsError('already-exists', 'Email already exists');
         }
 
-        throw new functions.https.HttpsError('internal', 'Failed to create user');
+        throw new functions.https.HttpsError('internal', `Failed to create user: ${error.message}`);
     }
 });
 
@@ -339,24 +345,26 @@ const setCustomUserClaims = functions.region("us-central1").https.onCall(async (
  * getAllUsers - Get all users (super_admin only)
  */
 const getAllUsers = functions.region("us-central1").https.onCall(async (data, context) => {
-    // Check authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'unauthenticated',
-            'Authentication required'
-        );
-    }
-
-    // Check if user is super_admin
-    const isAdmin = await isSuperAdmin(context.auth.uid);
-    if (!isAdmin) {
-        throw new functions.https.HttpsError(
-            'permission-denied',
-            'Only super_admin can view all users'
-        );
-    }
-
     try {
+        console.log('👥 getAllUsers called');
+        
+        // Check authentication
+        if (!context.auth) {
+            throw new functions.https.HttpsError(
+                'unauthenticated',
+                'Authentication required'
+            );
+        }
+
+        // Check if user is super_admin
+        const isAdmin = await isSuperAdmin(context.auth.uid);
+        if (!isAdmin) {
+            throw new functions.https.HttpsError(
+                'permission-denied',
+                'Only super_admin can view all users'
+            );
+        }
+
         const usersSnapshot = await db.collection('users')
             .orderBy('createdAt', 'desc')
             .get();
@@ -368,10 +376,15 @@ const getAllUsers = functions.region("us-central1").https.onCall(async (data, co
 
         return { users };
     } catch (error) {
-        console.error('Error fetching users:', error);
+        console.error('❌ getAllUsers error:', error);
+        
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        
         throw new functions.https.HttpsError(
             'internal',
-            'Failed to fetch users'
+            `Failed to fetch users: ${error.message}`
         );
     }
 });

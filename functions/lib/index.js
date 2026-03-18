@@ -61,20 +61,19 @@ exports.getMyLeads = leads.getMyLeads;
 exports.getLeadEvents = leads.getLeadEvents;
 exports.updateLeadStatus = leads.updateLeadStatus;
 exports.getAllLeads = leads.getAllLeads;
-// Lead Finder
-const leadFinder = require('./leadFinder');
-exports.submitWebsitesForScraping = leadFinder.submitWebsitesForScraping;
-exports.setupLeadFinderForUser = leadFinder.setupLeadFinderForUser;
-exports.saveLeadFinderAPIKey = leadFinder.saveLeadFinderAPIKey;
-exports.getLeadFinderConfig = leadFinder.getLeadFinderConfig;
-exports.getMyLeadFinderLeadsHTTP = leadFinder.getMyLeadFinderLeadsHTTP;
-exports.getMyLeadFinderLeads = leadFinder.getMyLeadFinderLeads;
-exports.startLeadFinderHTTP = leadFinder.startLeadFinderHTTP;
-exports.startLeadFinder = leadFinder.startLeadFinder;
-exports.getLeadFinderStatusHTTP = leadFinder.getLeadFinderStatusHTTP;
-exports.getLeadFinderStatus = leadFinder.getLeadFinderStatus;
-exports.deleteLeadFinderLeadsHTTP = leadFinder.deleteLeadFinderLeadsHTTP;
-exports.deleteLeadFinderLeads = leadFinder.deleteLeadFinderLeads;
+// Lead Finder HTTP Endpoints
+const leadFinderHTTP = require('./leadFinderHTTP');
+exports.startLeadFinder = leadFinderHTTP.startLeadFinder;
+exports.getLeadFinderStatus = leadFinderHTTP.getLeadFinderStatus;
+exports.deleteLeadFinderLeads = leadFinderHTTP.deleteLeadFinderLeads;
+exports.getMyLeadFinderLeads = leadFinderHTTP.getMyLeadFinderLeads;
+// Lead Finder Configuration (Callable Functions)
+const leadFinderConfig = require('./leadFinderConfig');
+exports.getLeadFinderConfig = leadFinderConfig.getLeadFinderConfig;
+exports.saveLeadFinderAPIKey = leadFinderConfig.saveLeadFinderAPIKey;
+// Lead Finder Firestore Trigger
+const leadFinderTrigger = require('./leadFinderTrigger');
+exports.processLeadFinder = leadFinderTrigger.processLeadFinder;
 // Lead Finder Queue & Monitoring
 const queueMonitoring = require('./queueMonitoring');
 exports.getLeadFinderQueueStats = queueMonitoring.getLeadFinderQueueStats;

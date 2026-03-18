@@ -178,24 +178,26 @@ const deleteAutomation = functions.region("us-central1").https.onCall(async (dat
  * getAllAutomations - Get all automations (super_admin only)
  */
 const getAllAutomations = functions.region("us-central1").https.onCall(async (data, context) => {
-    // Check authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'unauthenticated',
-            'Authentication required'
-        );
-    }
-
-    // Check if user is super_admin
-    const isAdmin = await isSuperAdmin(context.auth.uid);
-    if (!isAdmin) {
-        throw new functions.https.HttpsError(
-            'permission-denied',
-            'Only super_admin can view all automations'
-        );
-    }
-
     try {
+        console.log('🤖 getAllAutomations called');
+        
+        // Check authentication
+        if (!context.auth) {
+            throw new functions.https.HttpsError(
+                'unauthenticated',
+                'Authentication required'
+            );
+        }
+
+        // Check if user is super_admin
+        const isAdmin = await isSuperAdmin(context.auth.uid);
+        if (!isAdmin) {
+            throw new functions.https.HttpsError(
+                'permission-denied',
+                'Only super_admin can view all automations'
+            );
+        }
+
         const automationsSnapshot = await db.collection('automations')
             .orderBy('createdAt', 'desc')
             .get();
@@ -207,10 +209,15 @@ const getAllAutomations = functions.region("us-central1").https.onCall(async (da
 
         return { automations };
     } catch (error) {
-        console.error('Error fetching automations:', error);
+        console.error('❌ getAllAutomations error:', error);
+        
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        
         throw new functions.https.HttpsError(
             'internal',
-            'Failed to fetch automations'
+            `Failed to fetch automations: ${error.message}`
         );
     }
 });
@@ -220,13 +227,70 @@ const getAllAutomations = functions.region("us-central1").https.onCall(async (da
  * Called on first use to initialize the tool
  */
 const ensureLeadFinderAutomation = functions.region("us-central1").https.onCall(async (data, context) => {
+    // ========================================================================
+    // STEP 1: ENTRY LOGGING
+    // ========================================================================
+    console.log('🔥 FUNCTION STARTED: ensureLeadFinderAutomation');
+    console.log('📥 INPUT:', JSON.stringify(data, null, 2));
+    console.log('👤 USER:', context.auth?.uid || 'NO AUTH');
+    console.log('📧 EMAIL:', context.auth?.token?.email || 'NO EMAIL');
+    console.log('⏰ TIMESTAMP:', new Date().toISOString());
+    
+    // ========================================================================
+    // STEP 2: VALIDATE AUTHENTICATION
+    // ========================================================================
+    console.log('🔐 STEP 1: Validating authentication...');
+    if (!context.auth) {
+        console.error('❌ Authentication failed: User not logged in');
+        throw new functions.https.HttpsError(
+            'unauthenticated',
+            'User not logged in. Please authenticate first.'
+        );
+    }
+    console.log('✅ Authentication validated');
+    
     try {
+        // ====================================================================
+        // STEP 3: CHECK USER DOCUMENT
+        // ====================================================================
+        console.log('📄 STEP 2: Checking user document...');
+        console.log('   User ID:', context.auth.uid);
+        
+        const userDoc = await db.collection('users').doc(context.auth.uid).get();
+        console.log('   User doc exists:', userDoc.exists);
+        
+        if (!userDoc.exists) {
+            console.warn('⚠️ User document not found in Firestore');
+            // Don't fail - user might be valid but not in Firestore yet
+        } else {
+            const userData = userDoc.data();
+            console.log('   User role:', userData.role);
+            console.log('   User active:', userData.isActive);
+            console.log('   Assigned automations:', userData.assignedAutomations?.length || 0);
+        }
+        
+        // ====================================================================
+        // STEP 4: CHECK LEAD FINDER AUTOMATION
+        // ====================================================================
+        console.log('🔍 STEP 3: Checking Lead Finder automation document...');
         const leadFinderRef = db.collection('automations').doc('lead_finder');
+        console.log('   Document path:', leadFinderRef.path);
+        
         const leadFinderDoc = await leadFinderRef.get();
+        console.log('   Lead Finder doc exists:', leadFinderDoc.exists);
+        
+        if (leadFinderDoc.exists) {
+            const leadFinderData = leadFinderDoc.data();
+            console.log('   Lead Finder data:', JSON.stringify(leadFinderData, null, 2));
+        }
 
+        // ====================================================================
+        // STEP 5: CREATE IF NOT EXISTS
+        // ====================================================================
         if (!leadFinderDoc.exists) {
-            // Create the Lead Finder automation
-            await leadFinderRef.set({
+            console.log('✨ STEP 4: Creating Lead Finder automation...');
+            
+            const automationData = {
                 id: 'lead_finder',
                 name: 'Lead Finder',
                 description: 'Find and extract business emails from websites using web scraping',
@@ -247,18 +311,75 @@ const ensureLeadFinderAutomation = functions.region("us-central1").https.onCall(
                 },
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
-
-            console.log('✅ Lead Finder automation created');
-            return { status: 'created', message: 'Lead Finder automation initialized' };
+            };
+            
+            console.log('   Automation data to create:', JSON.stringify(automationData, null, 2));
+            
+            await leadFinderRef.set(automationData);
+            console.log('✅ Lead Finder automation created successfully');
+            
+            // Verify creation
+            const verifyDoc = await leadFinderRef.get();
+            console.log('   Verification - doc exists:', verifyDoc.exists);
+            
+            console.log('🎉 FUNCTION COMPLETED SUCCESSFULLY (created)');
+            return { 
+                success: true,
+                status: 'created', 
+                message: 'Lead Finder automation initialized',
+                automationId: 'lead_finder'
+            };
         }
 
-        return { status: 'exists', message: 'Lead Finder automation already exists' };
+        // ====================================================================
+        // STEP 6: RETURN SUCCESS (ALREADY EXISTS)
+        // ====================================================================
+        console.log('✅ STEP 4: Lead Finder automation already exists');
+        console.log('🎉 FUNCTION COMPLETED SUCCESSFULLY (exists)');
+        
+        return { 
+            success: true,
+            status: 'exists', 
+            message: 'Lead Finder automation already exists',
+            automationId: 'lead_finder'
+        };
+        
     } catch (error) {
-        console.error('Error ensuring Lead Finder automation:', error);
+        // ====================================================================
+        // ERROR HANDLING
+        // ====================================================================
+        console.error('❌ ========================================');
+        console.error('❌ CRITICAL ERROR IN ensureLeadFinderAutomation');
+        console.error('❌ ========================================');
+        console.error('❌ FULL ERROR OBJECT:', error);
+        console.error('❌ ERROR MESSAGE:', error.message);
+        console.error('❌ ERROR CODE:', error.code);
+        console.error('❌ ERROR NAME:', error.name);
+        console.error('❌ STACK TRACE:');
+        console.error(error.stack);
+        console.error('❌ ========================================');
+        
+        // Check for specific error types
+        if (error.code === 'permission-denied') {
+            console.error('❌ Firestore permission denied');
+            throw new functions.https.HttpsError(
+                'permission-denied',
+                'Insufficient permissions to access Firestore. Check security rules.'
+            );
+        }
+        
+        if (error.code === 'unavailable') {
+            console.error('❌ Firestore unavailable');
+            throw new functions.https.HttpsError(
+                'unavailable',
+                'Firestore service is temporarily unavailable. Please try again.'
+            );
+        }
+        
+        // Generic error
         throw new functions.https.HttpsError(
             'internal',
-            'Failed to initialize Lead Finder automation'
+            `Failed to initialize Lead Finder automation: ${error.message || 'Unknown error'}. Check function logs for details.`
         );
     }
 });
@@ -267,15 +388,17 @@ const ensureLeadFinderAutomation = functions.region("us-central1").https.onCall(
  * getMyAutomations - Get automations assigned to current user (client_user)
  */
 const getMyAutomations = functions.region("us-central1").https.onCall(async (data, context) => {
-    // Check authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-            'unauthenticated',
-            'Authentication required'
-        );
-    }
-
     try {
+        console.log('💼 getMyAutomations called');
+        
+        // Check authentication
+        if (!context.auth) {
+            throw new functions.https.HttpsError(
+                'unauthenticated',
+                'Authentication required'
+            );
+        }
+
         // Get user profile
         const userDoc = await db.collection('users').doc(context.auth.uid).get();
 
@@ -289,14 +412,14 @@ const getMyAutomations = functions.region("us-central1").https.onCall(async (dat
         const userData = userDoc.data();
 
         // Check if user is active
-        if (!userData.isActive) {
+        if (!userData?.isActive) {
             throw new functions.https.HttpsError(
                 'permission-denied',
                 'User account is disabled'
             );
         }
 
-        const assignedAutomations = userData.assignedAutomations || [];
+        const assignedAutomations = userData?.assignedAutomations || [];
 
         if (assignedAutomations.length === 0) {
             return { automations: [], message: 'No automations assigned' };
@@ -304,11 +427,16 @@ const getMyAutomations = functions.region("us-central1").https.onCall(async (dat
 
         // Fetch assigned automations
         const automationsPromises = assignedAutomations.map(async (automationId) => {
-            const doc = await db.collection('automations').doc(automationId).get();
-            if (doc.exists) {
-                return { id: doc.id, ...doc.data() };
+            try {
+                const doc = await db.collection('automations').doc(automationId).get();
+                if (doc.exists) {
+                    return { id: doc.id, ...doc.data() };
+                }
+                return null;
+            } catch (error) {
+                console.error(`❌ Error fetching automation ${automationId}:`, error);
+                return null;
             }
-            return null;
         });
 
         const automations = (await Promise.all(automationsPromises))
@@ -316,10 +444,15 @@ const getMyAutomations = functions.region("us-central1").https.onCall(async (dat
 
         return { automations };
     } catch (error) {
-        console.error('Error fetching user automations:', error);
+        console.error('❌ getMyAutomations error:', error);
+        
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        
         throw new functions.https.HttpsError(
             'internal',
-            'Failed to fetch automations'
+            `Failed to fetch automations: ${error.message}`
         );
     }
 });

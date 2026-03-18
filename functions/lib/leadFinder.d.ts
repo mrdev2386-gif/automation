@@ -35,7 +35,11 @@ export const saveWebhookConfig: functions.HttpsFunction & functions.Runnable<any
  */
 export const getMyLeadFinderLeadsHTTP: functions.HttpsFunction;
 /**
- * startLeadFinderHTTP - HTTP version with CORS support
+ * startLeadFinderCallable - Callable version for Firebase SDK
+ */
+export const startLeadFinderCallable: functions.HttpsFunction & functions.Runnable<any>;
+/**
+ * startLeadFinderHTTP - HTTP version with CORS support (for direct HTTP calls)
  */
 export const startLeadFinderHTTP: functions.HttpsFunction;
 /**
@@ -47,5 +51,5 @@ export const getLeadFinderStatusHTTP: functions.HttpsFunction;
  */
 export const deleteLeadFinderLeadsHTTP: functions.HttpsFunction;
 import functions = require("firebase-functions");
-export { getMyLeadFinderLeadsHTTP as getMyLeadFinderLeads, startLeadFinderHTTP as startLeadFinder, getLeadFinderStatusHTTP as getLeadFinderStatus, deleteLeadFinderLeadsHTTP as deleteLeadFinderLeads };
+export { getMyLeadFinderLeadsHTTP as getMyLeadFinderLeads, startLeadFinderCallable as startLeadFinder, getLeadFinderStatusHTTP as getLeadFinderStatus, deleteLeadFinderLeadsHTTP as deleteLeadFinderLeads };
 //# sourceMappingURL=leadFinder.d.ts.map

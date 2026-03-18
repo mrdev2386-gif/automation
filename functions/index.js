@@ -22,12 +22,43 @@
  * - emulator.js - Emulator helpers
  */
 
+const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
-// 1. Firebase Initialization
+// ============================================================================
+// FIREBASE INITIALIZATION (CRITICAL)
+// ============================================================================
 if (!admin.apps.length) {
     admin.initializeApp();
+    console.log('✅ Firebase Admin initialized successfully');
 }
+
+const db = admin.firestore();
+console.log('✅ Firestore instance created');
+
+// ============================================================================
+// TEST FUNCTION (CRITICAL FOR DEBUGGING)
+// ============================================================================
+exports.test = functions.region("us-central1").https.onCall(async (data, context) => {
+    try {
+        console.log('🧪 TEST FUNCTION CALLED');
+        console.log('Auth:', context.auth ? 'Authenticated' : 'Not authenticated');
+        console.log('Data:', data);
+        
+        return { 
+            ok: true, 
+            message: 'Test function working!',
+            timestamp: new Date().toISOString(),
+            auth: context.auth ? {
+                uid: context.auth.uid,
+                email: context.auth.token?.email
+            } : null
+        };
+    } catch (error) {
+        console.error('❌ TEST FUNCTION ERROR:', error);
+        throw new functions.https.HttpsError('internal', error.message);
+    }
+});
 
 /**
  * EXPORT MAPPINGS
@@ -67,12 +98,21 @@ exports.getLeadEvents = leads.getLeadEvents;
 exports.updateLeadStatus = leads.updateLeadStatus;
 exports.getAllLeads = leads.getAllLeads;
 
-// Lead Finder
+// Lead Finder HTTP Endpoints
 const leadFinderHTTP = require('./leadFinderHTTP');
 exports.startLeadFinder = leadFinderHTTP.startLeadFinder;
 exports.getLeadFinderStatus = leadFinderHTTP.getLeadFinderStatus;
 exports.deleteLeadFinderLeads = leadFinderHTTP.deleteLeadFinderLeads;
 exports.getMyLeadFinderLeads = leadFinderHTTP.getMyLeadFinderLeads;
+
+// Lead Finder Configuration (Callable Functions)
+const leadFinderConfig = require('./leadFinderConfig');
+exports.getLeadFinderConfig = leadFinderConfig.getLeadFinderConfig;
+exports.saveLeadFinderAPIKey = leadFinderConfig.saveLeadFinderAPIKey;
+
+// Lead Finder Firestore Trigger
+const leadFinderTrigger = require('./leadFinderTrigger');
+exports.processLeadFinder = leadFinderTrigger.processLeadFinder;
 
 // Lead Finder Queue & Monitoring
 const queueMonitoring = require('./queueMonitoring');

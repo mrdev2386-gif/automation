@@ -105,6 +105,9 @@ if (isEmulator()) {
 
 const callFunction = async (functionName, data = {}) => {
     try {
+        console.log('🔥🔥🔥 CALLFUNCTION EXECUTED:', functionName);
+        console.log('🔥 STACK TRACE:', new Error().stack);
+        console.log('🔥 USING httpsCallable PATH - NOT HTTP FETCH');
         console.log(`📞 Calling function: ${functionName}`, data);
         console.log(`📞 Functions region: us-central1`);
         console.log(`📞 Using httpsCallable (CORS-safe)`);
@@ -142,34 +145,14 @@ const callFunction = async (functionName, data = {}) => {
 
 /**
  * getLeadFinderConfig - Load Lead Finder configuration
- * Uses HTTP endpoint with Bearer token authentication
+ * Uses Firebase callable function (NOT HTTP)
  */
 export const getLeadFinderConfig = async () => {
-    console.log('🔍 getLeadFinderConfig: Starting HTTP request...');
+    console.log('🔥🔥🔥 getLeadFinderConfig SERVICE FUNCTION CALLED');
+    console.log('🔥 SERVICE STACK:', new Error().stack);
+    console.log('🔍 getLeadFinderConfig: Starting callable function call...');
     try {
-        const user = auth.currentUser;
-        if (!user) {
-            throw new Error('User not authenticated');
-        }
-
-        const idToken = await user.getIdToken();
-        const response = await fetch(
-            'https://us-central1-waautomation-13fa6.cloudfunctions.net/getLeadFinderConfig',
-            {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const result = await response.json();
+        const result = await callFunction('getLeadFinderConfig');
         console.log('🔍 getLeadFinderConfig: Success:', result);
         return result;
     } catch (error) {
@@ -178,22 +161,27 @@ export const getLeadFinderConfig = async () => {
     }
 };
 
+/**
+ * saveLeadFinderAPIKey - Save Lead Finder API keys
+ * Uses Firebase callable function (NOT HTTP)
+ */
 export const saveLeadFinderAPIKey = async (apiKeysData) => {
-    console.log('🔍 saveLeadFinderAPIKey: Starting call...');
+    console.log('🔥🔥🔥 saveLeadFinderAPIKey SERVICE FUNCTION CALLED');
+    console.log('🔥 SERVICE STACK:', new Error().stack);
+    console.log('🔍 saveLeadFinderAPIKey: Starting callable function call...');
     
-    // PHASE 1: Frontend payload validation and cleaning
+    // Validate and clean input
     const { serpApiKeys = [], apifyApiKeys = [] } = apiKeysData;
     
     console.log('🔍 Cleaned keys:', { serpCount: serpApiKeys.length, apifyCount: apifyApiKeys.length });
     
     try {
-        const fn = httpsCallable(functions, 'saveLeadFinderAPIKey');
-        const result = await fn({
+        const result = await callFunction('saveLeadFinderAPIKey', {
             serpApiKeys: serpApiKeys,
             apifyApiKeys: apifyApiKeys
         });
-        console.log('🔍 saveLeadFinderAPIKey: Success:', result.data);
-        return result.data;
+        console.log('🔍 saveLeadFinderAPIKey: Success:', result);
+        return result;
     } catch (error) {
         console.error('🔍 saveLeadFinderAPIKey: Error:', error);
         throw error;
@@ -205,6 +193,8 @@ export const saveLeadFinderAPIKey = async (apiKeysData) => {
  * Uses Firebase callable function
  */
 export const ensureLeadFinderAutomation = async (enabled) => {
+    console.log('🔥🔥🔥 ensureLeadFinderAutomation SERVICE FUNCTION CALLED');
+    console.log('🔥 SERVICE STACK:', new Error().stack);
     console.log('🔍 ensureLeadFinderAutomation: Starting callable function call...', { enabled });
     try {
         const result = await callFunction('ensureLeadFinderAutomation', { enabled });

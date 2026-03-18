@@ -90,7 +90,8 @@ const captureLead = functions.region("us-central1").https.onRequest((req, res) =
             }
 
             // 6. Create Lead
-            const leadId = await createLead(userId, {
+            const lead = await createLead({
+                clientUserId: userId,
                 name,
                 email,
                 phone,
@@ -101,23 +102,17 @@ const captureLead = functions.region("us-central1").https.onRequest((req, res) =
 
             // 7. Trigger Automations (Non-blocking)
             // Trigger background automation based on assigned tools
-            triggerLeadAutomation(userId, leadId, {
-                name,
-                email,
-                phone,
-                source,
-                metadata
-            }).catch(err => console.error('Automation trigger failed:', err));
+            triggerLeadAutomation(lead, userId).catch(err => console.error('Automation trigger failed:', err));
 
             // 8. Log activity
             await logActivity(userId, 'LEAD_CAPTURED', {
-                leadId,
+                leadId: lead.id,
                 source
             });
 
             return res.status(201).json({
                 success: true,
-                leadId,
+                leadId: lead.id,
                 message: 'Lead captured successfully'
             });
 
@@ -132,28 +127,30 @@ const captureLead = functions.region("us-central1").https.onRequest((req, res) =
  * captureLeadCallable - Callable version of lead capture
  */
 const captureLeadCallable = functions.region("us-central1").https.onCall(async (data, context) => {
-    // Check authentication if needed (or use clientKey)
-    const {
-        createLead,
-        checkDuplicate,
-        triggerLeadAutomation,
-        isValidEmail,
-        isValidPhone
-    } = require('./src/services/leadService');
-
-    const userId = context.auth ? context.auth.uid : data.userId;
-    if (!userId) {
-        throw new functions.https.HttpsError('unauthenticated', 'User ID required');
-    }
-
     try {
+        // Check authentication if needed (or use clientKey)
+        const {
+            createLead,
+            checkDuplicate,
+            triggerLeadAutomation,
+            isValidEmail,
+            isValidPhone
+        } = require('./src/services/leadService');
+
+        const userId = context.auth ? context.auth.uid : data.userId;
+        if (!userId) {
+            throw new functions.https.HttpsError('unauthenticated', 'User ID required');
+        }
+
         const { name, email, phone, source, metadata } = data;
 
         if (email && !isValidEmail(email)) {
             throw new functions.https.HttpsError('invalid-argument', 'Invalid email');
         }
 
-        const leadId = await createLead(userId, {
+        // Create lead with correct parameter structure
+        const lead = await createLead({
+            clientUserId: userId,
             name,
             email,
             phone,
@@ -162,7 +159,7 @@ const captureLeadCallable = functions.region("us-central1").https.onCall(async (
             status: 'new'
         });
 
-        return { success: true, leadId };
+        return { success: true, leadId: lead.id };
     } catch (error) {
         console.error('captureLeadCallable error:', error);
         throw new functions.https.HttpsError('internal', error.message);

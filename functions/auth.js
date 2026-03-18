@@ -19,20 +19,30 @@ const MAX_LOGIN_ATTEMPTS = 5;
  * Check if user is super_admin
  */
 const isSuperAdmin = async (userId) => {
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) return false;
-    const userData = userDoc.data();
-    return userData.role === 'super_admin' && userData.isActive === true;
+    try {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) return false;
+        const userData = userDoc.data();
+        return userData?.role === 'super_admin' && userData?.isActive === true;
+    } catch (error) {
+        console.error('❌ isSuperAdmin error:', error);
+        return false;
+    }
 };
 
 /**
  * Check if user is active
  */
 const isUserActive = async (userId) => {
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) return false;
-    const userData = userDoc.data();
-    return userData.isActive === true;
+    try {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) return false;
+        const userData = userDoc.data();
+        return userData?.isActive === true;
+    } catch (error) {
+        console.error('❌ isUserActive error:', error);
+        return false;
+    }
 };
 
 /**
@@ -47,7 +57,8 @@ const logActivity = async (userId, action, metadata = {}) => {
             timestamp: admin.firestore.FieldValue.serverTimestamp()
         });
     } catch (error) {
-        console.error('Failed to log activity:', error);
+        console.error('❌ Failed to log activity:', error);
+        // Don't throw - logging failure shouldn't break the main operation
     }
 };
 
