@@ -106,10 +106,24 @@ const LeadFinder = () => {
      */
     const pollJobStatus = async () => {
         try {
-            // ✅ Use Firebase SDK callable function (no CORS issues)
-            const getLeadFinderStatus = httpsCallable(functions, 'getLeadFinderStatus');
-            const result = await getLeadFinderStatus({ jobId: currentJobId });
-            const job = result.data.job;
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const token = await user.getIdToken();
+            const response = await fetch(
+                'https://us-central1-waautomation-13fa6.cloudfunctions.net/getLeadFinderStatus',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ jobId: currentJobId })
+                }
+            );
+
+            const result = await response.json();
+            const job = result.job;
             setJobStatus(job);
 
             if (job.status === 'completed' || job.status === 'failed') {
@@ -143,15 +157,38 @@ const LeadFinder = () => {
 
         try {
             setLoading(true);
-            // ✅ Use Firebase SDK callable function (no CORS issues)
-            const startLeadFinder = httpsCallable(functions, 'startLeadFinder');
-            const result = await startLeadFinder({
-                country: formData.country,
-                niche: formData.niche,
-                limit: formData.limit
-            });
+            
+            const user = auth.currentUser;
+            if (!user) {
+                showToast('Please login first', 'error');
+                return;
+            }
 
-            setCurrentJobId(result.data.jobId);
+            const token = await user.getIdToken();
+            const response = await fetch(
+                'https://us-central1-waautomation-13fa6.cloudfunctions.net/startLeadFinder',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        country: formData.country,
+                        niche: formData.niche,
+                        limit: formData.limit
+                    })
+                }
+            );
+
+            const result = await response.json();
+            console.log('Start Lead Finder Response:', result);
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to start lead finder');
+            }
+
+            setCurrentJobId(result.jobId);
             setProcessing(true);
             setActiveTab('jobs');
             showToast('🚀 Search started! Discovering and scraping websites...', 'success');
@@ -168,11 +205,40 @@ const LeadFinder = () => {
      */
     const fetchLeads = async () => {
         try {
-            // ✅ Use Firebase SDK callable function (no CORS issues)
-            const getMyLeadFinderLeads = httpsCallable(functions, 'getMyLeadFinderLeads');
-            const result = await getMyLeadFinderLeads();
-            setLeads(result.data.leads || []);
-            setJobs(result.data.jobs || []);
+            const user = auth.currentUser;
+            if (!user) {
+                showToast('Please login first', 'error');
+                return;
+            }
+
+            const token = await user.getIdToken();
+            const response = await fetch(
+                'https://us-central1-waautomation-13fa6.cloudfunctions.net/getMyLeadFinderLeads',
+                {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log('API RESPONSE:', result);
+
+            if (!result) {
+                throw new Error('Empty response from server');
+            }
+
+            const leads = result.leads || [];
+            const jobs = result.jobs || [];
+
+            setLeads(leads);
+            setJobs(jobs);
         } catch (error) {
             console.error('Error fetching leads:', error);
             showToast('Failed to load leads', 'error');
@@ -194,11 +260,33 @@ const LeadFinder = () => {
 
         try {
             setLoading(true);
-            // ✅ Use Firebase SDK callable function (no CORS issues)
-            const deleteLeadFinderLeads = httpsCallable(functions, 'deleteLeadFinderLeads');
+            
+            const user = auth.currentUser;
+            if (!user) {
+                showToast('Please login first', 'error');
+                return;
+            }
+
+            const token = await user.getIdToken();
             const leadIds = Array.from(selectedLeads);
             
-            const result = await deleteLeadFinderLeads({ leadIds });
+            const response = await fetch(
+                'https://us-central1-waautomation-13fa6.cloudfunctions.net/deleteLeadFinderLeads',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ leadIds })
+                }
+            );
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to delete leads');
+            }
 
             setSelectedLeads(new Set());
             await fetchLeads();

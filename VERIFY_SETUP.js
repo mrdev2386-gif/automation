@@ -12,10 +12,10 @@
 const http = require('http');
 
 const CHECKS = {
-    'Auth Emulator': { url: 'http://localhost:9100', port: 9100 },
+    'Auth Emulator': { url: 'http://localhost:9099', port: 9099 },
     'Functions Emulator': { url: 'http://localhost:5001', port: 5001 },
-    'Firestore Emulator': { url: 'http://localhost:8085', port: 8085 },
-    'Hosting Emulator': { url: 'http://localhost:5002', port: 5002 }
+    'Firestore Emulator': { url: 'http://localhost:8080', port: 8080 },
+    'Hosting Emulator': { url: 'http://localhost:5000', port: 5000 }
 };
 
 const ENDPOINTS = [

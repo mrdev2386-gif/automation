@@ -300,9 +300,16 @@ const extractPhone = (text) => {
  * @returns {string} - Sanitized input
  */
 const sanitizeInput = (input) => {
-    if (!input) return '';
-    // Remove control characters and trim
-    return input.replace(/[\x00-\x1F\x7F]/g, '').trim();
+    if (typeof input !== 'string') return '';
+
+    // Remove potential script injections and control characters
+    return input
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/javascript:/gi, '')
+        .replace(/on\w+=/gi, '')
+        .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+        .trim()
+        .substring(0, 10000); // Limit length
 };
 
 /**
