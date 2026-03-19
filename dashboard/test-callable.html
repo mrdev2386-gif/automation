@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Callable Functions</title>
+</head>
+<body>
+    <h1>Test Firebase Callable Functions</h1>
+    <button id="testBtn">Test getLeadFinderConfig</button>
+    <pre id="output"></pre>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAOB97HJHHsAbO5OQQ-kJtw3jyXU22A0bs",
+            authDomain: "waautomation-13fa6.firebaseapp.com",
+            projectId: "waautomation-13fa6"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const functions = getFunctions(app, 'us-central1');
+
+        document.getElementById('testBtn').addEventListener('click', async () => {
+            const output = document.getElementById('output');
+            try {
+                output.textContent = 'Signing in...';
+                
+                // Sign in first (use your test credentials)
+                await signInWithEmailAndPassword(auth, 'test@example.com', 'password123');
+                
+                output.textContent = 'Calling function...';
+                const getConfig = httpsCallable(functions, 'getLeadFinderConfig');
+                const result = await getConfig();
+                
+                output.textContent = JSON.stringify(result.data, null, 2);
+            } catch (error) {
+                output.textContent = `Error: ${error.message}\nCode: ${error.code}`;
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>

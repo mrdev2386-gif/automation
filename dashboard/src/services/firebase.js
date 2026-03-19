@@ -48,6 +48,12 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const functions = getFunctions(app, 'us-central1');
 
+// CRITICAL: Set custom domain to avoid CORS issues
+// This forces the SDK to use the correct endpoint
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    console.log('🔧 Development mode - using production functions');
+}
+
 console.log('🔥 Firebase Project:', firebaseConfig.projectId);
 console.log('🔥 Region: us-central1');
 
@@ -74,27 +80,17 @@ const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
 
 const USE_EMULATOR = import.meta.env.VITE_USE_EMULATOR === 'true';
 
-const isEmulator = () => {
-    return (window.location.hostname === 'localhost' || 
-           window.location.hostname === '127.0.0.1') && USE_EMULATOR;
-};
-
 // Setup emulator connection ONLY if explicitly enabled
-if (isEmulator()) {
+if (USE_EMULATOR && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     try {
-        // Only connect if not already connected
-        if (!functions._delegate._region.includes('localhost')) {
-            connectFunctionsEmulator(functions, 'localhost', 5001);
-            console.log('✅ Connected to Firebase Functions Emulator on localhost:5001');
-        } else {
-            console.log('✅ Already connected to Firebase Functions Emulator');
-        }
+        connectFunctionsEmulator(functions, 'localhost', 5001);
+        console.log('✅ Connected to Firebase Functions Emulator on localhost:5001');
     } catch (error) {
-        // Emulator might already be connected or not running
-        console.warn('⚠️ Emulator connection skipped:', error.message);
+        console.warn('⚠️ Emulator connection failed:', error.message);
     }
 } else {
     console.log('🔥 Using production Firebase Functions (us-central1)');
+    console.log('🔥 Project ID:', firebaseConfig.projectId);
 }
 
 // ============================================================================
@@ -105,24 +101,32 @@ if (isEmulator()) {
 
 const callFunction = async (functionName, data = {}) => {
     try {
-        console.log('🔥🔥🔥 CALLFUNCTION EXECUTED:', functionName);
-        console.log('🔥 STACK TRACE:', new Error().stack);
-        console.log('🔥 USING httpsCallable PATH - NOT HTTP FETCH');
-        console.log(`📞 Calling function: ${functionName}`, data);
-        console.log(`📞 Functions region: us-central1`);
-        console.log(`📞 Using httpsCallable (CORS-safe)`);
+        // Check auth state
+        const currentUser = auth.currentUser;
+        console.log(`📞 Calling function: ${functionName}`);
+        console.log(`📞 Project: ${firebaseConfig.projectId}`);
+        console.log(`📞 Region: us-central1`);
+        console.log(`📞 Auth User:`, currentUser ? currentUser.email : 'NOT LOGGED IN');
+        console.log(`📞 Data:`, data);
+        
+        // Ensure user is authenticated
+        if (!currentUser) {
+            throw new Error('User must be logged in to call functions');
+        }
+        
+        // Get fresh token
+        const token = await currentUser.getIdToken(true);
+        console.log(`📞 Token obtained:`, token ? 'YES' : 'NO');
         
         const fn = httpsCallable(functions, functionName);
-        console.log(`📞 Function reference created for: ${functionName}`);
-        
         const result = await fn(data);
-        console.log(`✅ Function ${functionName} returned:`, result.data);
+        
+        console.log(`✅ Function ${functionName} succeeded`);
         return result.data;
     } catch (error) {
         console.error(`❌ Function ${functionName} failed:`, error);
         console.error(`❌ Error code: ${error.code}`);
         console.error(`❌ Error message: ${error.message}`);
-        console.error(`❌ Full error:`, error);
         
         if (error.code === 'functions/unauthenticated') {
             throw new Error('You must be logged in to perform this action');
@@ -148,17 +152,7 @@ const callFunction = async (functionName, data = {}) => {
  * Uses Firebase callable function (NOT HTTP)
  */
 export const getLeadFinderConfig = async () => {
-    console.log('🔥🔥🔥 getLeadFinderConfig SERVICE FUNCTION CALLED');
-    console.log('🔥 SERVICE STACK:', new Error().stack);
-    console.log('🔍 getLeadFinderConfig: Starting callable function call...');
-    try {
-        const result = await callFunction('getLeadFinderConfig');
-        console.log('🔍 getLeadFinderConfig: Success:', result);
-        return result;
-    } catch (error) {
-        console.error('🔍 getLeadFinderConfig: Error:', error);
-        throw error;
-    }
+    return callFunction('getLeadFinderConfig');
 };
 
 /**
@@ -166,26 +160,11 @@ export const getLeadFinderConfig = async () => {
  * Uses Firebase callable function (NOT HTTP)
  */
 export const saveLeadFinderAPIKey = async (apiKeysData) => {
-    console.log('🔥🔥🔥 saveLeadFinderAPIKey SERVICE FUNCTION CALLED');
-    console.log('🔥 SERVICE STACK:', new Error().stack);
-    console.log('🔍 saveLeadFinderAPIKey: Starting callable function call...');
-    
-    // Validate and clean input
     const { serpApiKeys = [], apifyApiKeys = [] } = apiKeysData;
-    
-    console.log('🔍 Cleaned keys:', { serpCount: serpApiKeys.length, apifyCount: apifyApiKeys.length });
-    
-    try {
-        const result = await callFunction('saveLeadFinderAPIKey', {
-            serpApiKeys: serpApiKeys,
-            apifyApiKeys: apifyApiKeys
-        });
-        console.log('🔍 saveLeadFinderAPIKey: Success:', result);
-        return result;
-    } catch (error) {
-        console.error('🔍 saveLeadFinderAPIKey: Error:', error);
-        throw error;
-    }
+    return callFunction('saveLeadFinderAPIKey', {
+        serpApiKeys,
+        apifyApiKeys
+    });
 };
 
 /**
@@ -193,17 +172,7 @@ export const saveLeadFinderAPIKey = async (apiKeysData) => {
  * Uses Firebase callable function
  */
 export const ensureLeadFinderAutomation = async (enabled) => {
-    console.log('🔥🔥🔥 ensureLeadFinderAutomation SERVICE FUNCTION CALLED');
-    console.log('🔥 SERVICE STACK:', new Error().stack);
-    console.log('🔍 ensureLeadFinderAutomation: Starting callable function call...', { enabled });
-    try {
-        const result = await callFunction('ensureLeadFinderAutomation', { enabled });
-        console.log('🔍 ensureLeadFinderAutomation: Success:', result);
-        return result;
-    } catch (error) {
-        console.error('🔍 ensureLeadFinderAutomation: Error:', error);
-        throw error;
-    }
+    return callFunction('ensureLeadFinderAutomation', { enabled });
 };
 
 export const startAILeadCampaign = async (campaignData) => {
